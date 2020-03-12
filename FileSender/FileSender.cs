@@ -75,6 +75,12 @@ namespace FileSender
         private File file;
         private byte[] signedContent;
 
+        private File idealFile = new File("Ideal File", new byte[]{1,2,3});
+        private Document idealDocument;
+        private byte[] idealSignedContent = new byte[] {1, 7};
+        private string idealFormat = "4.0";
+        private DateTime idealDate = DateTime.Now;
+
         [SetUp]
         public void SetUp()
         {
@@ -89,13 +95,57 @@ namespace FileSender
             sender = A.Fake<ISender>();
             recognizer = A.Fake<IRecognizer>();
             fileSender = new FileSender(cryptographer, sender, recognizer);
+
+
+            idealDocument = new Document(idealFile.Name, idealFile.Content, idealDate, idealFormat);
+
+            A.CallTo(() => recognizer.TryRecognize(idealFile, out idealDocument))
+                .Returns(true);
+            A.CallTo(() => cryptographer.Sign(idealDocument.Content, certificate))
+                .Returns(idealSignedContent);
+            A.CallTo(() => sender.TrySend(idealSignedContent))
+                .Returns(true);
+
+
+            fileSender.SendFiles(new[] { idealFile }, certificate)
+                .SkippedFiles.Should().BeEmpty();
         }
 
         [TestCase("4.0")]
         [TestCase("3.1")]
         public void Send_WhenGoodFormat(string format)
         {
-            var document = new Document(file.Name, file.Content, DateTime.Now, format);
+        }
+
+        [Test]
+        public void Skip_WhenBadFormat()
+        {
+            var document = new Document(file.Name, file.Content, DateTime.Now, "");
+            A.CallTo(() => recognizer.TryRecognize(file, out document))
+                .Returns(true);
+            var result = fileSender.SendFiles(new[] {file}, certificate)
+                .SkippedFiles;
+            result.Length.Should().Be(1);
+            result.Should().Contain(file);
+        }
+
+        [Test]
+        public void Skip_WhenOlderThanAMonth()
+        {
+            var document = new Document(file.Name, file.Content, DateTime.Now-new TimeSpan(31), "4.0");
+            A.CallTo(() => recognizer.TryRecognize(file, out document))
+                .Returns(true);
+            
+            var result = fileSender.SendFiles(new[] { file }, certificate)
+                .SkippedFiles;
+            result.Length.Should().Be(1);
+            result.Should().Contain(file);
+        }
+
+        [Test]
+        public void Send_WhenYoungerThanAMonth()
+        {
+            var document = new Document(file.Name, file.Content, DateTime.Now, "4.0");
             A.CallTo(() => recognizer.TryRecognize(file, out document))
                 .Returns(true);
             A.CallTo(() => cryptographer.Sign(document.Content, certificate))
@@ -105,55 +155,67 @@ namespace FileSender
 
             fileSender.SendFiles(new[] {file}, certificate)
                 .SkippedFiles.Should().BeEmpty();
+
         }
 
         [Test]
-        [Ignore("Not implemented")]
-        public void Skip_WhenBadFormat()
-        {
-            throw new NotImplementedException();
-        }
-
-        [Test]
-        [Ignore("Not implemented")]
-        public void Skip_WhenOlderThanAMonth()
-        {
-            throw new NotImplementedException();
-        }
-
-        [Test]
-        [Ignore("Not implemented")]
-        public void Send_WhenYoungerThanAMonth()
-        {
-            throw new NotImplementedException();
-        }
-
-        [Test]
-        [Ignore("Not implemented")]
         public void Skip_WhenSendFails()
         {
-            throw new NotImplementedException();
+            var document = new Document(file.Name, file.Content, DateTime.Now, "4.0");
+            A.CallTo(() => recognizer.TryRecognize(file, out document))
+                .Returns(true);
+            A.CallTo(() => cryptographer.Sign(document.Content, certificate))
+                .Returns(signedContent);
+            A.CallTo(() => sender.TrySend(signedContent))
+                .Returns(false);
+
+            var result = fileSender.SendFiles(new[] {file}, certificate).SkippedFiles;
+            result.Length.Should().Be(1);
+            result.Should().Contain(file);
+
         }
 
         [Test]
-        [Ignore("Not implemented")]
         public void Skip_WhenNotRecognized()
         {
-            throw new NotImplementedException();
+            var document = new Document(file.Name, file.Content, DateTime.Now, "4.0");
+            A.CallTo(() => recognizer.TryRecognize(file, out document))
+                .Returns(false);
+
+            var result = fileSender.SendFiles(new[] { file }, certificate).SkippedFiles;
+            result.Length.Should().Be(1);
+            result.Should().Contain(file);
         }
 
         [Test]
-        [Ignore("Not implemented")]
         public void IndependentlySend_WhenSeveralFilesAndSomeAreInvalid()
         {
-            throw new NotImplementedException();
+            var document = new Document(file.Name, file.Content, DateTime.Now, "4.0");
+            A.CallTo(() => recognizer.TryRecognize(file, out document))
+                .Returns(false);
+
+            var result = fileSender.SendFiles(new[] { file }, certificate).SkippedFiles;
+            result.Length.Should().Be(1);
+            result.Should().Contain(file);
         }
 
         [Test]
-        [Ignore("Not implemented")]
         public void IndependentlySend_WhenSeveralFilesAndSomeCouldNotSend()
         {
-            throw new NotImplementedException();
+            var document = new Document(file.Name, file.Content, DateTime.Now, "4.0");
+
+            A.CallTo(() => recognizer.TryRecognize(file, out document))
+                .Returns(true);
+            A.CallTo(() => cryptographer.Sign(file.Content, certificate))
+                .Returns(signedContent);
+            A.CallTo(() => sender.TrySend(signedContent))
+                .Returns(false);
+
+            var result = fileSender.SendFiles(new[] { file }, certificate).SkippedFiles;
+            result.Length.Should().Be(1);
+            result.Should().Contain(file);
+
+
         }
     }
 }
