@@ -1,5 +1,7 @@
 ﻿using System.Collections.Generic;
 using NUnit.Framework;
+using FakeItEasy;
+using FluentAssertions;
 
 namespace MockFramework
 {
@@ -43,8 +45,62 @@ namespace MockFramework
         [SetUp]
         public void SetUp()
         {
-            //thingService = A...
+            thingService = A.Fake<IThingService>();
             thingCache = new ThingCache(thingService);
+        }
+
+        [Test]
+        public void TryReadFromEmptyCache_ShouldReturnNull()
+        {
+            thingCache.Get(thingId1)
+                .Should().BeNull();
+            A.CallTo(() => thingService.TryRead(thingId1, out thing1))
+                .MustHaveHappenedOnceExactly();
+        }
+
+        [Test]
+        public void TryReadFromCacheAfterFirstTryRead_ServiceShouldBeCalledExactlyOnce()
+        {
+            A.CallTo(() => thingService.TryRead(thingId1, out thing1)).Returns(true);
+            thingCache.Get(thingId1);
+            A.CallTo(() => thingService.TryRead(thingId1, out thing1))
+                .MustHaveHappenedOnceExactly();
+        }
+
+        [Test]
+        public void TryReadFromCacheAfterFirstTryRead_ShouldReturnCorrectValue()
+        {
+            A.CallTo(() => thingService.TryRead(thingId1, out thing1)).Returns(true);
+            var returned = thingCache.Get(thingId1);
+            returned.Should().Be(thing1);
+        }
+
+        [Test]
+        public void TryReadFromCacheAfterTryReadThoThings_ServiceShouldBeCalledExactlyForBothThings()
+        {
+            A.CallTo(() => thingService.TryRead(thingId1, out thing1)).Returns(true);
+            A.CallTo(() => thingService.TryRead(thingId2, out thing2)).Returns(true);
+
+            var returnedThing1 = thingCache.Get(thingId1);
+            var returnedThing2 = thingCache.Get(thingId2);
+
+            A.CallTo(() => thingService.TryRead(thingId1, out thing1))
+                .MustHaveHappenedOnceExactly();
+            A.CallTo(() => thingService.TryRead(thingId2, out thing2))
+                .MustHaveHappenedOnceExactly();
+        }
+
+        [Test]
+        public void TryReadFromCacheAfterTryReadThoThings_ShouldReturnThisThingsCorrectly()
+        {
+            A.CallTo(() => thingService.TryRead(thingId1, out thing1)).Returns(true);
+            A.CallTo(() => thingService.TryRead(thingId2, out thing2)).Returns(true);
+
+            var returnedThing1 = thingCache.Get(thingId1);
+            var returnedThing2 = thingCache.Get(thingId2);
+
+            returnedThing1.Should().Be(thing1);
+            returnedThing2.Should().Be(thing2);
         }
 
         //TODO: написать простейший тест, а затем все остальные
